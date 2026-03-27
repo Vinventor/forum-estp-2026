@@ -49,7 +49,7 @@ export default function BC1Page() {
       if (!userEmail) return;
 
       try {
-        const res = await fetch(`http://localhost:3001/api/company-status?email=${userEmail}`);
+        const res = await fetch(${API_URL}/api/company-status?email=...);
         if (res.ok) {
           const data = await res.json();
           
@@ -108,7 +108,7 @@ export default function BC1Page() {
     });
 
     try {
-      const res = await fetch('http://localhost:3001/api/save-bc1', {
+      const res = await fetch(${API_URL}/api/company-status?email=...), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
