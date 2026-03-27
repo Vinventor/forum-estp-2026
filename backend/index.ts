@@ -12,16 +12,24 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
+// --- 2. CONFIGURATION CORS (LA SOUDURE FINALE) ---
 app.use(cors({
   origin: [
-    "https://ton-site-nom-de-projet.vercel.app", // Ton URL Vercel
-    "http://localhost:3000"                      // Pour tes tests locaux
+    "https://forum-estp-2026.vercel.app", // Ton URL exacte est maintenant ici !
+    "http://localhost:3000"
   ],
+  methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true
 }));
+
 app.use(express.json());
 
-// --- 2. AUTHENTIFICATION ---
+// Petit test de vie pour Render
+app.get('/', (req, res) => {
+  res.send('🚀 Serveur Forum ESTP 2026 Opérationnel et connecté à Vercel !');
+});
+
+// --- 3. AUTHENTIFICATION ---
 
 app.post('/api/register', async (req, res) => {
   try {
@@ -65,7 +73,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// --- 3. STATUTS & DASHBOARD ---
+// --- 4. STATUTS & DASHBOARD ---
 
 app.get('/api/company-status', async (req, res) => {
   const { email } = req.query;
@@ -79,9 +87,7 @@ app.get('/api/company-status', async (req, res) => {
     res.json({
       companyName: user.company.name,
       pack: user.company.pack,
-      // Statut BC1 : Validé si un pack a été choisi
       isBc1Valid: !!user.company.pack, 
-      // Statut BC2 : Validé si logisticsData contient quelque chose ou si le statut est VALIDATED
       isBc2Valid: user.company.bc2Status === "VALIDATED" || user.company.bc2Status === "SIGNED"
     });
   } catch (error) {
@@ -89,18 +95,14 @@ app.get('/api/company-status', async (req, res) => {
   }
 });
 
-// --- 4. RÉCUPÉRATION DES DÉTAILS (HISTORIQUE) ---
-
 app.get('/api/company-details', async (req, res) => {
   const { email } = req.query;
   try {
     const user = await prisma.user.findUnique({
       where: { email: String(email).toLowerCase() },
-      include: { company: true } // Crucial : inclut logisticsData pour l'historique
+      include: { company: true }
     });
-
     if (!user) return res.status(404).json({ error: "Utilisateur introuvable" });
-
     res.json({ 
       user: {
         firstName: user.firstName,
@@ -118,13 +120,11 @@ app.get('/api/company-details', async (req, res) => {
 
 // --- 5. SAUVEGARDE DES BONS DE COMMANDE ---
 
-// Sauvegarde BC1 (Stand)
 app.post('/api/save-bc1', async (req, res) => {
   const { email, pack, surface, totalHT, options } = req.body;
   try {
     const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
     if (!user) return res.status(404).json({ error: "Utilisateur non trouvé" });
-
     await prisma.company.update({
       where: { id: user.companyId },
       data: { pack, surface, totalHT, options, bc1Status: "VALIDATED" }
@@ -135,35 +135,27 @@ app.post('/api/save-bc1', async (req, res) => {
   }
 });
 
-// Sauvegarde BC2 (Logistique)
 app.post('/api/save-bc2', async (req, res) => {
   const { email, logisticsData, totalHT } = req.body;
-  
-  console.log("📥 Sauvegarde BC2 demandée pour :", email);
-
   try {
     const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
     if (!user) return res.status(404).json({ error: "Utilisateur non trouvé" });
-
     await prisma.company.update({
       where: { id: user.companyId },
       data: {
-        logisticsData: logisticsData, // Reçoit le tableau [{name, qty, price...}]
+        logisticsData: logisticsData,
         bc2TotalHT: totalHT,
         bc2Status: "VALIDATED"
       }
     });
-
-    console.log("✅ BC2 enregistré !");
     res.json({ success: true });
   } catch (error) {
-    console.error("🔥 Erreur Prisma BC2 :", error instanceof Error ? error.message : String(error));
-    res.status(500).json({ error: "Erreur lors de la sauvegarde du BC2" });
+    res.status(500).json({ error: "Erreur BC2" });
   }
 });
 
 // --- 6. DÉMARRAGE ---
-const PORT = 3001; 
+const PORT = process.env.PORT || 3001; 
 app.listen(PORT, () => {
-  console.log(`🚀 SERVEUR ESTP ACTIF : http://localhost:${PORT}`);
+  console.log(`🚀 SERVEUR ESTP ACTIF SUR LE PORT : ${PORT}`);
 });
