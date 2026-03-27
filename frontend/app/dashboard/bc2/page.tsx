@@ -4,7 +4,10 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
+
+// Utilisation de l'URL dynamique pour Render/Vercel
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://forum-estp-2026.onrender.com';
 
 const CATALOGUE = {
   "Mise en avant": [
@@ -96,15 +99,16 @@ export default function BC2Page() {
 
   // 1. CHARGEMENT DE L'HISTORIQUE
   useEffect(() => {
-    const email = localStorage.getItem('userEmail');
-    if (!email) return router.push('/login');
+    const fetchData = async () => {
+      const email = localStorage.getItem('userEmail');
+      if (!email) return router.push('/login');
 
-    fetch(`http://localhost:3001/api/company-details?email=${encodeURIComponent(email)}`)
-      .then(res => res.json())
-      .then(data => {
+      try {
+        const res = await fetch(`${API_URL}/api/company-details?email=${encodeURIComponent(email)}`);
+        const data = await res.json();
+        
         if (data.company?.logisticsData) {
           const initialQty: Record<number, number> = {};
-          // On fait correspondre le nom stocké avec l'ID du catalogue
           data.company.logisticsData.forEach((savedItem: any) => {
             const catalogItem = Object.values(CATALOGUE).flat().find(i => i.name === savedItem.name);
             if (catalogItem) {
@@ -113,59 +117,29 @@ export default function BC2Page() {
           });
           setQuantities(initialQty);
         }
+      } catch (err) {
+        console.error("Erreur chargement BC2:", err);
+      } finally {
         setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      }
+    };
+    fetchData();
   }, [router]);
 
   const updateQty = (id: number, delta: number) => {
     setQuantities(p => ({ ...p, [id]: Math.max(0, (p[id] || 0) + delta) }));
-    setMsg(''); // On efface le message de succès si l'utilisateur modifie
+    setMsg('');
   };
 
-  const calculateHT = () => {
-    let t = 0;
-    Object.values(CATALOGUE).flat().forEach(i => t += (quantities[i.id] || 0) * i.price);
-    return t;
-  };
+  const totalHT = Object.values(CATALOGUE).flat().reduce((acc, item) => {
+    return acc + (quantities[item.id] || 0) * item.price;
+  }, 0);
 
-  const totalHT = calculateHT();
-
-  // 2. GÉNÉRATION DU PDF
-  const generatePDF = () => {
-    const doc = new jsPDF();
-    const email = localStorage.getItem('userEmail');
-    
-    doc.setFontSize(18);
-    doc.setTextColor(0, 43, 92);
-    doc.text("RÉCAPITULATIF LOGISTIQUE (BC2)", 14, 20);
-    
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Entreprise : ${email}`, 14, 30);
-    doc.text(`Date : ${new Date().toLocaleDateString('fr-FR')}`, 14, 35);
-
-    const rows = Object.entries(quantities)
-      .filter(([_, q]) => q > 0)
-      .map(([id, q]) => {
-        const item = Object.values(CATALOGUE).flat().find(i => i.id === parseInt(id));
-        return [item?.name, q, `${item?.price} €`, `${(item?.price || 0) * q} €`];
-      });
-
-    (doc as any).autoTable({
-      startY: 45,
-      head: [['Article', 'Quantité', 'Prix Unitaire HT', 'Total HT']],
-      body: rows,
-      foot: [['', '', 'TOTAL HT', `${totalHT} €`]],
-      theme: 'striped',
-      headStyles: { fillColor: [0, 43, 92] }
-    });
-
-    doc.save(`Recapitulatif_BC2_${email}.pdf`);
-  };
-
+  // 2. SAUVEGARDE
   const handleSave = async () => {
     const email = localStorage.getItem('userEmail');
+    if (!email) return;
+    
     setMsg("⏳ Validation...");
 
     const summary = Object.entries(quantities)
@@ -176,7 +150,7 @@ export default function BC2Page() {
       });
 
     try {
-      const res = await fetch('http://localhost:3001/api/save-bc2', {
+      const res = await fetch(`${API_URL}/api/save-bc2`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, logisticsData: summary, totalHT })
@@ -185,8 +159,12 @@ export default function BC2Page() {
       if (res.ok) {
         setMsg("✅ ENREGISTRÉ !");
         setTimeout(() => setMsg(''), 3000);
+      } else {
+        setMsg("❌ Erreur lors de l'enregistrement.");
       }
-    } catch (e) { setMsg("❌ Erreur serveur."); }
+    } catch (e) { 
+      setMsg("❌ Erreur serveur."); 
+    }
   };
 
   if (loading) return <div className="p-20 font-black italic text-[#002B5C] text-center">Chargement de votre historique...</div>;
@@ -196,12 +174,10 @@ export default function BC2Page() {
       <div className="max-w-5xl mx-auto">
         <header className="flex justify-between items-center mb-10">
           <div>
-            <h1 className="text-4xl font-black uppercase tracking-tighter leading-none">Bon de Commande BC2</h1>
-            <p className="text-[10px] font-bold text-gray-400 not-italic uppercase mt-2 tracking-widest">Logistique & Mobilier</p>
+            <h1 className="text-4xl font-black uppercase tracking-tighter leading-none">Logistique BC2</h1>
+            <p className="text-[10px] font-bold text-gray-400 not-italic uppercase mt-2 tracking-widest">Mobilier & Services 2026</p>
           </div>
-          <div className="flex gap-4">
-            <Link href="/dashboard" className="bg-white px-8 py-2 rounded-full shadow-sm text-[10px] font-black uppercase not-italic border">← Dashboard</Link>
-          </div>
+          <Link href="/dashboard" className="bg-white px-8 py-2 rounded-full shadow-sm text-[10px] font-black uppercase not-italic border hover:bg-gray-50 transition-all">← Dashboard</Link>
         </header>
 
         <div className="space-y-4">
@@ -213,7 +189,13 @@ export default function BC2Page() {
               {openCategory === name && (
                 <div className="p-6 pt-0 border-t overflow-x-auto">
                   <table className="w-full text-left">
-                    <thead><tr className="text-[10px] uppercase text-gray-400 font-black"><th className="pb-4">Article</th><th className="pb-4">Prix Unit.</th><th className="pb-4 text-center">Quantité</th></tr></thead>
+                    <thead>
+                      <tr className="text-[10px] uppercase text-gray-400 font-black">
+                        <th className="pb-4">Article</th>
+                        <th className="pb-4">Prix Unit.</th>
+                        <th className="pb-4 text-center">Quantité</th>
+                      </tr>
+                    </thead>
                     <tbody className="not-italic">
                       {items.map(i => (
                         <tr key={i.id} className="border-b last:border-0 hover:bg-gray-50 transition-all">
@@ -236,7 +218,6 @@ export default function BC2Page() {
           ))}
         </div>
 
-        {/* BARRE DE TOTAL ET ACTIONS */}
         <div className="mt-10 bg-[#002B5C] text-white p-10 rounded-[2.5rem] flex flex-col md:flex-row justify-between items-center shadow-2xl gap-8 border-4 border-white">
           <div className="flex gap-10">
             <div>
