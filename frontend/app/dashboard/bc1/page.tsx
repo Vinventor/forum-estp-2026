@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://forum-estp-2026.onrender.com';
 
 const OPTIONS_CATALOG = [
   { id: '88', label: 'Vidéo de présentation entreprise', price: 375 },
