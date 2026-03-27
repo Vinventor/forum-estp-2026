@@ -17,7 +17,6 @@ export default function LoginPage() {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://forum-estp-2026.onrender.com';
       
-      // ON ENVOIE LA REQUÊTE (C'est cette ligne qui manquait !)
       const res = await fetch(`${API_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -46,41 +45,22 @@ export default function LoginPage() {
           <h1 className="text-3xl font-black text-[#002B5C] uppercase tracking-tighter">Forum ESTP</h1>
           <p className="text-gray-400 mt-2 font-bold uppercase text-[10px] tracking-widest not-italic">Espace Exposant 2026</p>
         </div>
-
         {error && (
           <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded mb-6 text-xs font-bold not-italic">
             {error}
           </div>
         )}
-
         <form onSubmit={handleLogin} className="space-y-6 not-italic">
-          <div className="space-y-2">
+          <div>
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email professionnel</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full border-b-2 border-gray-100 p-3 focus:border-[#002B5C] outline-none font-bold transition-all"
-              placeholder="contact@entreprise.com"
-            />
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full border-b-2 border-gray-100 p-3 focus:border-[#002B5C] outline-none font-bold transition-all" placeholder="contact@entreprise.com" />
           </div>
-          <div className="space-y-2">
+          <div>
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Mot de passe</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full border-b-2 border-gray-100 p-3 focus:border-[#002B5C] outline-none font-bold transition-all"
-              placeholder="••••••••"
-            />
+            <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full border-b-2 border-gray-100 p-3 focus:border-[#002B5C] outline-none font-bold transition-all" placeholder="••••••••" />
           </div>
-          <button type="submit" className="w-full bg-[#002B5C] text-white font-black py-4 rounded-2xl hover:bg-black transition-all shadow-lg uppercase tracking-widest mt-4">
-            Se connecter
-          </button>
+          <button type="submit" className="w-full bg-[#002B5C] text-white font-black py-4 rounded-2xl hover:bg-black transition-all shadow-lg uppercase tracking-widest mt-4">Se connecter</button>
         </form>
-
         <div className="mt-10 text-center text-[10px] border-t pt-8 border-gray-100 font-bold uppercase tracking-widest">
           <p className="text-gray-400">Pas encore inscrit ? <Link href="/register" className="text-blue-600 hover:underline">Créer un compte</Link></p>
         </div>
