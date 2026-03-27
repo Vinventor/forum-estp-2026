@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-// Adresse de ton backend sur Render
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://forum-estp-2026.onrender.com';
 
 const OPTIONS_CATALOG = [
@@ -35,6 +34,157 @@ const OPTIONS_CATALOG = [
 const pricingData: any = {
   simple: { 9: 1680, 12: 2200, 15: 2590, 18: 3085, 21: 3600, 24: 4120, 28: 4740, 32: 5420, 36: 6030 },
   plus: { 9: 2650, 12: 3770, 15: 4160, 18: 4780, 21: 5270, 24: 5890, 28: 6440, 32: 7250, 36: 8280, 40: 9410, 46: 9870, 52: 10900, 60: 12200, 70: 13700, 80: 15290, 90: 17010, 100: 18610, 110: 20320, 120: 21810, 144: 30770, 150: 37450 },
+  premium: { 9: 3680, 12: 4710, 15: 5200, 18: 6000 }
+};
+
+export default function BC1Page() {
+  const router = useRouter();
+  const [selection, setSelection] = useState({ pack: 'simple', surface: 9 });
+  const [selectedOptions, setSelectedOptions] = useState<{ [key: string]: number }>({});
+  const [totalHT, setTotalHT] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadSavedData = async () => {
+      const userEmail = localStorage.getItem('userEmail');
+      if (!userEmail) return router.push('/login');
+      try {
+        const res = await fetch(`${API_URL}/api/company-details?email=${encodeURIComponent(userEmail)}`);
+        if (res.ok) {
+          const data = await res.json();
+          const company = data.company;
+          if (company) {
+            if (company.pack) setSelection({ pack: company.pack.toLowerCase(), surface: company.surface || 9 });
+            if (company.options) {
+              const restored: { [key: string]: number } = {};
+              Object.entries(company.options).forEach(([label, qty]) => {
+                const opt = OPTIONS_CATALOG.find(o => o.label === label);
+                if (opt) restored[opt.id] = qty as number;
+              });
+              setSelectedOptions(restored);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Erreur chargement", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadSavedData();
+  }, [router]);
+
+  useEffect(() => {
+    const standPrice = (pricingData[selection.pack] && pricingData[selection.pack][selection.surface]) ? pricingData[selection.pack][selection.surface] : 0;
+    const optionsPrice = OPTIONS_CATALOG.reduce((acc, opt) => acc + (opt.price * (selectedOptions[opt.id] || 0)), 0);
+    setTotalHT(standPrice + optionsPrice);
+  }, [selection, selectedOptions]);
+
+  const updateOptionQty = (id: string, delta: number) => {
+    setSelectedOptions(prev => ({ ...prev, [id]: Math.max(0, (prev[id] || 0) + delta) }));
+  };
+
+  const handleSave = async () => {
+    const userEmail = localStorage.getItem('userEmail');
+    if (!userEmail) return;
+    const optionsToSave: { [key: string]: number } = {};
+    Object.entries(selectedOptions).forEach(([id, qty]) => {
+      if (qty > 0) {
+        const details = OPTIONS_CATALOG.find(o => o.id === id);
+        if (details) optionsToSave[details.label] = qty;
+      }
+    });
+
+    try {
+      const res = await fetch(`${API_URL}/api/save-bc1`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: userEmail, pack: selection.pack, surface: selection.surface, options: optionsToSave, totalHT: totalHT })
+      });
+      if (res.ok) {
+        alert("✅ Choix enregistrés !");
+        router.push('/dashboard');
+      }
+    } catch (e) {
+      alert("Erreur de connexion");
+    }
+  };
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center font-black italic text-[#002B5C]">Chargement...</div>;
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-48 font-sans italic text-[#002B5C]">
+      <div className="max-w-6xl mx-auto pt-10 px-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
+            <Link href="/dashboard" className="font-black uppercase text-[10px] tracking-widest bg-white px-4 py-2 rounded-full shadow-sm hover:bg-[#002B5C] hover:text-white transition-all not-italic">
+                ← Retour au Dashboard
+            </Link>
+            <h1 className="text-3xl md:text-5xl font-black uppercase tracking-tighter italic leading-none">Votre Stand 2026</h1>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+          <div className="lg:col-span-4 space-y-6">
+            <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-gray-100">
+              <span className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-6 block not-italic">01. Configuration</span>
+              <div className="space-y-8 not-italic">
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-3 ml-2">Type de Pack</label>
+                  <select value={selection.pack} onChange={(e) => setSelection({...selection, pack: e.target.value})} className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl p-4 font-bold outline-none focus:border-[#002B5C] appearance-none">
+                    <option value="simple">Pack Simple</option>
+                    <option value="plus">Pack Plus</option>
+                    <option value="premium">Pack Premium</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-3 ml-2">Surface du stand</label>
+                  <select value={selection.surface} onChange={(e) => setSelection({...selection, surface: parseInt(e.target.value)})} className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl p-4 font-bold outline-none focus:border-[#002B5C] appearance-none">
+                    {pricingData[selection.pack] && Object.keys(pricingData[selection.pack]).map(size => (
+                      <option key={size} value={size}>{size} m² — {pricingData[selection.pack][size].toLocaleString()} €</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-8 bg-white p-8 md:p-12 rounded-[3rem] shadow-2xl border border-gray-100">
+            <span className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-8 block not-italic">02. Catalogue de communication</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {OPTIONS_CATALOG.map((opt) => (
+                <div key={opt.id} className="p-6 bg-gray-50 rounded-3xl border border-transparent hover:border-blue-200 hover:bg-white transition-all flex flex-col justify-between min-h-[140px]">
+                  <div>
+                    <p className="text-[11px] font-black uppercase leading-tight mb-2">{opt.label}</p>
+                    <p className="text-blue-500 font-bold not-italic text-[10px]">{opt.price.toLocaleString()} € HT</p>
+                  </div>
+                  <div className="flex items-center justify-between mt-auto pt-4 border-t border-gray-100/50">
+                    <span className="text-[9px] font-black text-gray-300 uppercase not-italic">Quantité</span>
+                    <div className="flex items-center gap-3 bg-white p-1.5 rounded-xl shadow-sm border border-gray-100">
+                      <button onClick={() => updateOptionQty(opt.id, -1)} className="w-8 h-8 flex items-center justify-center font-bold text-gray-400 hover:text-red-500 not-italic">-</button>
+                      <span className="font-black not-italic text-sm w-4 text-center">{selectedOptions[opt.id] || 0}</span>
+                      <button onClick={() => updateOptionQty(opt.id, 1)} className="w-8 h-8 flex items-center justify-center font-bold text-[#002B5C] hover:text-blue-600 not-italic">+</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-100 p-6 z-50">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+          <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 not-italic">Total de votre commande</p>
+              <p className="text-4xl md:text-6xl font-black italic tracking-tighter leading-none">{totalHT.toLocaleString()} € <span className="text-xs not-italic font-bold opacity-30">HT</span></p>
+          </div>
+          <button onClick={handleSave} className="w-full md:w-auto bg-[#002B5C] text-white px-16 py-6 rounded-[2rem] font-black uppercase text-sm tracking-widest hover:bg-blue-600 transition-all shadow-2xl active:scale-95 not-italic">
+            Valider la réservation
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}  plus: { 9: 2650, 12: 3770, 15: 4160, 18: 4780, 21: 5270, 24: 5890, 28: 6440, 32: 7250, 36: 8280, 40: 9410, 46: 9870, 52: 10900, 60: 12200, 70: 13700, 80: 15290, 90: 17010, 100: 18610, 110: 20320, 120: 21810, 144: 30770, 150: 37450 },
   premium: { 9: 3680, 12: 4710, 15: 5200, 18: 6000 }
 };
 
