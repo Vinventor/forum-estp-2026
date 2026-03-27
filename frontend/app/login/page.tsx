@@ -15,19 +15,27 @@ export default function LoginPage() {
     setError('');
 
     try {
-      // Appel au backend (localhost:3001)
+      // 1. On définit l'adresse du serveur
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://forum-estp-2026.onrender.com';
       
+      // 2. LA LIGNE MANQUANTE : On envoie la requête au backend
+      const res = await fetch(`${API_URL}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      // 3. On vérifie la réponse
       if (res.ok) {
         const data = await res.json(); 
         
         // 🧹 On nettoie les anciennes données de session
         localStorage.clear();
         
-        // 💾 LE BADGE D'IDENTITÉ COMPLET
+        // 💾 Sauvegarde des infos de l'exposant
         localStorage.setItem('user_name', data.firstName);
         localStorage.setItem('companyName', data.companyName);
-        localStorage.setItem('userEmail', data.email); // <--- INDISPENSABLE POUR LE BC1
+        localStorage.setItem('userEmail', data.email);
 
         // Direction le Dashboard
         router.push('/dashboard');
@@ -35,7 +43,7 @@ export default function LoginPage() {
         setError('Email ou mot de passe incorrect.');
       }
     } catch (err) {
-      setError('Impossible de joindre le serveur. Vérifiez que votre backend est lancé sur le port 3001.');
+      setError('Impossible de joindre le serveur. Vérifiez votre connexion internet.');
     }
   };
 
