@@ -12,7 +12,13 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    "https://ton-site-nom-de-projet.vercel.app", // Ton URL Vercel
+    "http://localhost:3000"                      // Pour tes tests locaux
+  ],
+  credentials: true
+}));
 app.use(express.json());
 
 // --- 2. AUTHENTIFICATION ---
