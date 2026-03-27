@@ -17,7 +17,7 @@ export default function LoginPage() {
     try {
       // Appel au backend (localhost:3001)
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://forum-estp-2026.onrender.com';
-
+      
       if (res.ok) {
         const data = await res.json(); 
         
