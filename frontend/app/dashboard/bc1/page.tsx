@@ -49,7 +49,11 @@ export default function BC1Page() {
       if (!userEmail) return;
 
       try {
-        const res = await fetch(`${API_URL}/api/login`, { ... });
+        const res = await fetch(`${API_URL}/api/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }), // Remets ce que tu avais avant ici !
+        });
         if (res.ok) {
           const data = await res.json();
           
@@ -108,7 +112,7 @@ export default function BC1Page() {
     });
 
     try {
-      const res = await fetch(`${API_URL}/api/login`, { ... }), {
+      const res = await fetch(`${API_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
