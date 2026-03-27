@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+
+// Utilisation de l'URL de ton backend Render
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://forum-estp-2026.onrender.com';
 
 const OPTIONS_CATALOG = [
@@ -30,6 +32,12 @@ const OPTIONS_CATALOG = [
   { id: '114', label: 'Toile imprimée sur châssis', price: 290 },
 ];
 
+const pricingData: any = {
+  simple: { 9: 1680, 12: 2200, 15: 2590, 18: 3085, 21: 3600, 24: 4120, 28: 4740, 32: 5420, 36: 6030 },
+  plus: { 9: 2650, 12: 3770, 15: 4160, 18: 4780, 21: 5270, 24: 5890, 28: 6440, 32: 7250, 36: 8280, 40: 9410, 46: 9870, 52: 10900, 60: 12200, 70: 13700, 80: 15290, 90: 17010, 100: 18610, 110: 20320, 120: 21810, 144: 30770, 150: 37450 },
+  premium: { 9: 3680, 12: 4710, 15: 5200, 18: 6000 }
+};
+
 export default function BC1Page() {
   const router = useRouter();
   const [selection, setSelection] = useState({ pack: 'simple', surface: 9 });
@@ -37,42 +45,40 @@ export default function BC1Page() {
   const [totalHT, setTotalHT] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const pricingData: any = {
-    simple: { 9: 1680, 12: 2200, 15: 2590, 18: 3085, 21: 3600, 24: 4120, 28: 4740, 32: 5420, 36: 6030 },
-    plus: { 9: 2650, 12: 3770, 15: 4160, 18: 4780, 21: 5270, 24: 5890, 28: 6440, 32: 7250, 36: 8280, 40: 9410, 46: 9870, 52: 10900, 60: 12200, 70: 13700, 80: 15290, 90: 17010, 100: 18610, 110: 20320, 120: 21810, 144: 30770, 150: 37450 },
-    premium: { 9: 3680, 12: 4710, 15: 5200, 18: 6000 }
-  };
-
-  // --- 1. CHARGEMENT INITIAL (MÉMOIRE) ---
+  // --- 1. CHARGEMENT DES DONNÉES EXISTANTES ---
   useEffect(() => {
     const loadSavedData = async () => {
       const userEmail = localStorage.getItem('userEmail');
-      if (!userEmail) return;
+      if (!userEmail) return router.push('/login');
 
       try {
-        const res = await fetch(`${API_URL}/api/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-        });
+        // CORRECTION : On utilise l'API de détails, pas le login !
+        const res = await fetch(`${API_URL}/api/company-details?email=${encodeURIComponent(userEmail)}`);
+        
         if (res.ok) {
           const data = await res.json();
+          const company = data.company;
           
-          // On restaure le stand
-          if (data.pack) setSelection({ pack: data.pack, surface: data.surface || 9 });
+          if (company) {
+            // Restauration du pack et surface
+            if (company.pack) {
+              setSelection({ 
+                pack: company.pack.toLowerCase(), 
+                surface: company.surface || 9 
+              });
+            }
 
-          // On restaure les options (Traduction Nom -> ID)
-          if (data.options) {
-            const restoredOptions: { [key: string]: number } = {};
-            
-            // On boucle sur ce que la DB nous envoie (ex: { "Vidéo...": 1 })
-            Object.entries(data.options).forEach(([label, qty]) => {
-              const optionFound = OPTIONS_CATALOG.find(o => o.label === label);
-              if (optionFound) {
-                restoredOptions[optionFound.id] = qty as number;
-              }
-            });
-            setSelectedOptions(restoredOptions);
+            // Restauration des options (Nom -> ID)
+            if (company.options) {
+              const restoredOptions: { [key: string]: number } = {};
+              Object.entries(company.options).forEach(([label, qty]) => {
+                const optionFound = OPTIONS_CATALOG.find(o => o.label === label);
+                if (optionFound) {
+                  restoredOptions[optionFound.id] = qty as number;
+                }
+              });
+              setSelectedOptions(restoredOptions);
+            }
           }
         }
       } catch (err) {
@@ -82,7 +88,7 @@ export default function BC1Page() {
       }
     };
     loadSavedData();
-  }, []);
+  }, [router]);
 
   // --- 2. CALCUL DU TOTAL ---
   useEffect(() => {
@@ -100,10 +106,11 @@ export default function BC1Page() {
     }));
   };
 
+  // --- 3. SAUVEGARDE ---
   const handleSave = async () => {
     const userEmail = localStorage.getItem('userEmail');
+    if (!userEmail) return;
     
-    // On prépare les données avec les NOMS pour la DB
     const optionsToSave: { [key: string]: number } = {};
     Object.entries(selectedOptions).forEach(([id, qty]) => {
       if (qty > 0) {
@@ -113,7 +120,8 @@ export default function BC1Page() {
     });
 
     try {
-      const res = await fetch(`${API_URL}/api/login`, {
+      // CORRECTION : On utilise l'URL de sauvegarde /api/save-bc1
+      const res = await fetch(`${API_URL}/api/save-bc1`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -128,9 +136,11 @@ export default function BC1Page() {
       if (res.ok) {
         alert("✅ Choix mémorisés avec succès !");
         router.push('/dashboard');
+      } else {
+        alert("Erreur lors de la sauvegarde.");
       }
     } catch (e) {
-      alert("Erreur de connexion");
+      alert("Erreur de connexion au serveur.");
     }
   };
 
@@ -138,7 +148,6 @@ export default function BC1Page() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-48 font-sans italic text-[#002B5C]">
-      {/* ... (Le reste du code HTML reste identique à celui d'avant) ... */}
       <div className="max-w-6xl mx-auto pt-10 px-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
             <Link href="/dashboard" className="font-black uppercase text-[10px] tracking-[0.2em] bg-white px-4 py-2 rounded-full shadow-sm hover:bg-blue-900 hover:text-white transition-all not-italic">
@@ -171,7 +180,7 @@ export default function BC1Page() {
                     onChange={(e) => setSelection({...selection, surface: parseInt(e.target.value)})}
                     className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl p-4 font-bold outline-none focus:border-blue-900 transition-all appearance-none"
                   >
-                    {Object.keys(pricingData[selection.pack]).map(size => (
+                    {pricingData[selection.pack] && Object.keys(pricingData[selection.pack]).map(size => (
                       <option key={size} value={size}>{size} m² — {pricingData[selection.pack][size].toLocaleString()} €</option>
                     ))}
                   </select>
