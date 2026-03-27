@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-// Utilisation de l'URL de ton backend Render
+// Adresse de ton backend sur Render
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://forum-estp-2026.onrender.com';
 
 const OPTIONS_CATALOG = [
@@ -45,21 +45,180 @@ export default function BC1Page() {
   const [totalHT, setTotalHT] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // --- 1. CHARGEMENT DES DONNÉES EXISTANTES ---
+  // --- 1. CHARGEMENT INITIAL ---
   useEffect(() => {
     const loadSavedData = async () => {
       const userEmail = localStorage.getItem('userEmail');
       if (!userEmail) return router.push('/login');
 
       try {
-        // CORRECTION : On utilise l'API de détails, pas le login !
         const res = await fetch(`${API_URL}/api/company-details?email=${encodeURIComponent(userEmail)}`);
-        
         if (res.ok) {
           const data = await res.json();
           const company = data.company;
-          
           if (company) {
+            // Restauration Stand
+            if (company.pack) setSelection({ pack: company.pack.toLowerCase(), surface: company.surface || 9 });
+            // Restauration Options
+            if (company.options) {
+              const restored: { [key: string]: number } = {};
+              Object.entries(company.options).forEach(([label, qty]) => {
+                const opt = OPTIONS_CATALOG.find(o => o.label === label);
+                if (opt) restored[opt.id] = qty as number;
+              });
+              setSelectedOptions(restored);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Erreur chargement :", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadSavedData();
+  }, [router]);
+
+  // --- 2. CALCUL DU TOTAL ---
+  useEffect(() => {
+    const standPrice = (pricingData[selection.pack] && pricingData[selection.pack][selection.surface]) ? pricingData[selection.pack][selection.surface] : 0;
+    const optionsPrice = OPTIONS_CATALOG.reduce((acc, opt) => acc + (opt.price * (selectedOptions[opt.id] || 0)), 0);
+    setTotalHT(standPrice + optionsPrice);
+  }, [selection, selectedOptions]);
+
+  const updateOptionQty = (id: string, delta: number) => {
+    setSelectedOptions(prev => ({
+      ...prev,
+      [id]: Math.max(0, (prev[id] || 0) + delta)
+    }));
+  };
+
+  // --- 3. SAUVEGARDE ---
+  const handleSave = async () => {
+    const userEmail = localStorage.getItem('userEmail');
+    if (!userEmail) return;
+
+    const optionsToSave: { [key: string]: number } = {};
+    Object.entries(selectedOptions).forEach(([id, qty]) => {
+      if (qty > 0) {
+        const details = OPTIONS_CATALOG.find(o => o.id === id);
+        if (details) optionsToSave[details.label] = qty;
+      }
+    });
+
+    try {
+      const res = await fetch(`${API_URL}/api/save-bc1`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: userEmail,
+          pack: selection.pack,
+          surface: selection.surface,
+          options: optionsToSave,
+          totalHT: totalHT
+        })
+      });
+
+      if (res.ok) {
+        alert("✅ Choix enregistrés !");
+        router.push('/dashboard');
+      } else {
+        alert("Erreur lors de la sauvegarde.");
+      }
+    } catch (e) {
+      alert("Erreur de connexion au serveur.");
+    }
+  };
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center font-black italic text-[#002B5C]">Chargement...</div>;
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-48 font-sans italic text-[#002B5C]">
+      <div className="max-w-6xl mx-auto pt-10 px-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
+          <Link href="/dashboard" className="font-black uppercase text-[10px] tracking-widest bg-white px-4 py-2 rounded-full shadow-sm hover:bg-[#002B5C] hover:text-white transition-all not-italic">
+            ← Dashboard
+          </Link>
+          <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tighter italic leading-none text-right">Votre Stand 2026</h1>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+          {/* CONFIGURATION STAND */}
+          <div className="lg:col-span-4 space-y-6">
+            <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-gray-100">
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500 mb-6 block not-italic">01. Configuration</span>
+              <div className="space-y-8 not-italic">
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-3">Type de Pack</label>
+                  <select 
+                    value={selection.pack}
+                    onChange={(e) => setSelection({...selection, pack: e.target.value})}
+                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl p-4 font-bold outline-none focus:border-[#002B5C] transition-all"
+                  >
+                    <option value="simple">Pack Simple</option>
+                    <option value="plus">Pack Plus</option>
+                    <option value="premium">Pack Premium</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-3">Surface</label>
+                  <select 
+                    value={selection.surface}
+                    onChange={(e) => setSelection({...selection, surface: parseInt(e.target.value)})}
+                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl p-4 font-bold outline-none focus:border-[#002B5C] transition-all"
+                  >
+                    {pricingData[selection.pack] && Object.keys(pricingData[selection.pack]).map(size => (
+                      <option key={size} value={size}>{size} m² — {pricingData[selection.pack][size].toLocaleString()} €</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* OPTIONS CATALOGUE */}
+          <div className="lg:col-span-8 bg-white p-8 md:p-12 rounded-[3rem] shadow-2xl border border-gray-100">
+            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500 mb-8 block not-italic">02. Catalogue Communication</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {OPTIONS_CATALOG.map((opt) => (
+                <div key={opt.id} className="p-6 bg-gray-50 rounded-3xl border border-transparent hover:border-blue-200 transition-all flex flex-col justify-between min-h-[140px]">
+                  <div>
+                    <p className="text-[11px] font-black uppercase leading-tight mb-2">{opt.label}</p>
+                    <p className="text-blue-500 font-bold not-italic text-[10px]">{opt.price.toLocaleString()} € HT</p>
+                  </div>
+                  <div className="flex items-center justify-between mt-4">
+                    <span className="text-[9px] font-black text-gray-300 uppercase not-italic">Qté</span>
+                    <div className="flex items-center gap-3 bg-white p-1 rounded-xl shadow-sm border border-gray-100">
+                      <button onClick={() => updateOptionQty(opt.id, -1)} className="w-8 h-8 flex items-center justify-center font-bold text-gray-400 hover:text-red-500">-</button>
+                      <span className="font-black not-italic text-sm">{selectedOptions[opt.id] || 0}</span>
+                      <button onClick={() => updateOptionQty(opt.id, 1)} className="w-8 h-8 flex items-center justify-center font-bold text-[#002B5C] hover:text-blue-600">+</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* BARRE FIXE FINALE */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-100 p-6 z-50">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+          <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 not-italic">Récapitulatif HT</p>
+              <p className="text-4xl md:text-6xl font-black italic tracking-tighter leading-none">{totalHT.toLocaleString()} €</p>
+          </div>
+          <button 
+            onClick={handleSave}
+            className="w-full md:w-auto bg-[#002B5C] text-white px-16 py-6 rounded-[2rem] font-black uppercase text-sm tracking-widest hover:bg-blue-600 transition-all shadow-2xl active:scale-95"
+          >
+            Valider mes choix
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}          if (company) {
             // Restauration du pack et surface
             if (company.pack) {
               setSelection({ 
