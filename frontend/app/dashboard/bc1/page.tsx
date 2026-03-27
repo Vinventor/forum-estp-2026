@@ -10,33 +10,13 @@ const OPTIONS_CATALOG = [
   { id: '89', label: 'Placement du Logo entreprise sur les affiches', price: 700 },
   { id: '90', label: 'Placement du logo entreprise sur les pellicules du photowall', price: 650 },
   { id: '91', label: 'Offre communication', price: 1500 },
-  { id: '95', label: 'Logo entreprise sur le tote bag', price: 1500 },
-  { id: '100', label: 'Logo entreprise sur la pochette d’ordinateur', price: 1500 },
-  { id: '99', label: 'Logo entreprise sur la sacoche', price: 4000 },
-  { id: '102', label: 'Offre visibilité', price: 6250 },
   { id: '93', label: 'Mise en avant sur le plan du forum', price: 320 },
-  { id: '94', label: 'Accès à l\'espace VIP toute la journée pour 2 personnes', price: 60 },
-  { id: '96', label: 'Visibilité sur Seekube', price: 900 },
-  { id: '101', label: 'Placement d\'éléments publicitaires', price: 750 },
-  { id: '103', label: 'Pancarte 40x40 cm', price: 55 },
-  { id: '104', label: 'Mise en avant de nouveautés sur stand', price: 0 },
-  { id: '111', label: 'Promotion de votre entreprise en Story Instagram', price: 150 },
-  { id: '105', label: 'Book - Option 1', price: 720 },
-  { id: '106', label: 'Book - Option 2', price: 720 },
-  { id: '107', label: 'Book - Option 3', price: 720 },
-  { id: '108', label: 'Book - Option 4', price: 2500 },
-  { id: '109', label: 'Book - Option 5', price: 3500 },
+  { id: '94', label: 'Accès VIP pour 2 personnes', price: 60 },
+  { id: '111', label: 'Story Instagram', price: 150 },
   { id: '112', label: 'Bannière suspendue', price: 495 },
-  { id: '113', label: 'Adhésivage sur cloison', price: 280 },
-  { id: '114', label: 'Toile imprimée sur châssis', price: 290 },
+  { id: '113', label: 'Adhésivage sur cloison', price: 280 }
 ];
 
-const pricingData: any = {
-  simple: { 9: 1680, 12: 2200, 15: 2590, 18: 3085, 21: 3600, 24: 4120, 28: 4740, 32: 5420, 36: 6030 },
-  plus: { 9: 2650, 12: 3770, 15: 4160, 18: 4780, 21: 5270, 24: 5890, 28: 6440, 32: 7250, 36: 8280, 40: 9410, 46: 9870, 52: 10900, 60: 12200, 70: 13700, 80: 15290, 90: 17010, 100: 18610, 110: 20320, 120: 21810, 144: 30770, 150: 37450 },
-  premium: { 9: 3680, 12: 4710, 15: 5200, 18: 6000 }
-};
-
 export default function BC1Page() {
   const router = useRouter();
   const [selection, setSelection] = useState({ pack: 'simple', surface: 9 });
@@ -44,476 +24,93 @@ export default function BC1Page() {
   const [totalHT, setTotalHT] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  const pricingData: any = {
+    simple: { 9: 1680, 12: 2200, 15: 2590, 18: 3085, 21: 3600, 24: 4120, 28: 4740, 32: 5420, 36: 6030 },
+    plus: { 9: 2650, 12: 3770, 15: 4160, 18: 4780, 21: 5270, 24: 5890, 28: 6440, 32: 7250, 36: 8280, 40: 9410, 46: 9870, 52: 10900, 60: 12200, 70: 13700, 80: 15290, 90: 17010, 100: 18610, 110: 20320, 120: 21810, 144: 30770, 150: 37450 },
+    premium: { 9: 3680, 12: 4710, 15: 5200, 18: 6000 }
+  };
+
   useEffect(() => {
-    const loadSavedData = async () => {
-      const userEmail = localStorage.getItem('userEmail');
-      if (!userEmail) return router.push('/login');
+    const loadData = async () => {
+      const email = localStorage.getItem('userEmail');
+      if (!email) return router.push('/login');
       try {
-        const res = await fetch(`${API_URL}/api/company-details?email=${encodeURIComponent(userEmail)}`);
+        const res = await fetch(`${API_URL}/api/company-details?email=${encodeURIComponent(email)}`);
         if (res.ok) {
           const data = await res.json();
-          const company = data.company;
-          if (company) {
-            if (company.pack) setSelection({ pack: company.pack.toLowerCase(), surface: company.surface || 9 });
-            if (company.options) {
-              const restored: { [key: string]: number } = {};
-              Object.entries(company.options).forEach(([label, qty]) => {
+          if (data.company) {
+            if (data.company.pack) setSelection({ pack: data.company.pack.toLowerCase(), surface: data.company.surface || 9 });
+            if (data.company.options) {
+              const restored: any = {};
+              Object.entries(data.company.options).forEach(([label, qty]) => {
                 const opt = OPTIONS_CATALOG.find(o => o.label === label);
-                if (opt) restored[opt.id] = qty as number;
+                if (opt) restored[opt.id] = qty;
               });
               setSelectedOptions(restored);
             }
           }
         }
-      } catch (err) {
-        console.error("Erreur chargement", err);
-      } finally {
-        setLoading(false);
-      }
+      } catch (e) { console.error(e); } finally { setLoading(false); }
     };
-    loadSavedData();
+    loadData();
   }, [router]);
 
-  useEffect(() => {
-    const standPrice = (pricingData[selection.pack] && pricingData[selection.pack][selection.surface]) ? pricingData[selection.pack][selection.surface] : 0;
-    const optionsPrice = OPTIONS_CATALOG.reduce((acc, opt) => acc + (opt.price * (selectedOptions[opt.id] || 0)), 0);
-    setTotalHT(standPrice + optionsPrice);
-  }, [selection, selectedOptions]);
-
-  const updateOptionQty = (id: string, delta: number) => {
-    setSelectedOptions(prev => ({ ...prev, [id]: Math.max(0, (prev[id] || 0) + delta) }));
-  };
-
-  const handleSave = async () => {
-    const userEmail = localStorage.getItem('userEmail');
-    if (!userEmail) return;
-    const optionsToSave: { [key: string]: number } = {};
-    Object.entries(selectedOptions).forEach(([id, qty]) => {
-      if (qty > 0) {
-        const details = OPTIONS_CATALOG.find(o => o.id === id);
-        if (details) optionsToSave[details.label] = qty;
-      }
-    });
-
-    try {
-      const res = await fetch(`${API_URL}/api/save-bc1`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: userEmail, pack: selection.pack, surface: selection.surface, options: optionsToSave, totalHT: totalHT })
-      });
-      if (res.ok) {
-        alert("✅ Choix enregistrés !");
-        router.push('/dashboard');
-      }
-    } catch (e) {
-      alert("Erreur de connexion");
-    }
-  };
-
-  if (loading) return <div className="min-h-screen flex items-center justify-center font-black italic text-[#002B5C]">Chargement...</div>;
-
-  return (
-    <div className="min-h-screen bg-gray-50 pb-48 font-sans italic text-[#002B5C]">
-      <div className="max-w-6xl mx-auto pt-10 px-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
-            <Link href="/dashboard" className="font-black uppercase text-[10px] tracking-widest bg-white px-4 py-2 rounded-full shadow-sm hover:bg-[#002B5C] hover:text-white transition-all not-italic">
-                ← Retour au Dashboard
-            </Link>
-            <h1 className="text-3xl md:text-5xl font-black uppercase tracking-tighter italic leading-none">Votre Stand 2026</h1>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          <div className="lg:col-span-4 space-y-6">
-            <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-gray-100">
-              <span className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-6 block not-italic">01. Configuration</span>
-              <div className="space-y-8 not-italic">
-                <div>
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-3 ml-2">Type de Pack</label>
-                  <select value={selection.pack} onChange={(e) => setSelection({...selection, pack: e.target.value})} className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl p-4 font-bold outline-none focus:border-[#002B5C] appearance-none">
-                    <option value="simple">Pack Simple</option>
-                    <option value="plus">Pack Plus</option>
-                    <option value="premium">Pack Premium</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-3 ml-2">Surface du stand</label>
-                  <select value={selection.surface} onChange={(e) => setSelection({...selection, surface: parseInt(e.target.value)})} className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl p-4 font-bold outline-none focus:border-[#002B5C] appearance-none">
-                    {pricingData[selection.pack] && Object.keys(pricingData[selection.pack]).map(size => (
-                      <option key={size} value={size}>{size} m² — {pricingData[selection.pack][size].toLocaleString()} €</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="lg:col-span-8 bg-white p-8 md:p-12 rounded-[3rem] shadow-2xl border border-gray-100">
-            <span className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-8 block not-italic">02. Catalogue de communication</span>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {OPTIONS_CATALOG.map((opt) => (
-                <div key={opt.id} className="p-6 bg-gray-50 rounded-3xl border border-transparent hover:border-blue-200 hover:bg-white transition-all flex flex-col justify-between min-h-[140px]">
-                  <div>
-                    <p className="text-[11px] font-black uppercase leading-tight mb-2">{opt.label}</p>
-                    <p className="text-blue-500 font-bold not-italic text-[10px]">{opt.price.toLocaleString()} € HT</p>
-                  </div>
-                  <div className="flex items-center justify-between mt-auto pt-4 border-t border-gray-100/50">
-                    <span className="text-[9px] font-black text-gray-300 uppercase not-italic">Quantité</span>
-                    <div className="flex items-center gap-3 bg-white p-1.5 rounded-xl shadow-sm border border-gray-100">
-                      <button onClick={() => updateOptionQty(opt.id, -1)} className="w-8 h-8 flex items-center justify-center font-bold text-gray-400 hover:text-red-500 not-italic">-</button>
-                      <span className="font-black not-italic text-sm w-4 text-center">{selectedOptions[opt.id] || 0}</span>
-                      <button onClick={() => updateOptionQty(opt.id, 1)} className="w-8 h-8 flex items-center justify-center font-bold text-[#002B5C] hover:text-blue-600 not-italic">+</button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-100 p-6 z-50">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 not-italic">Total de votre commande</p>
-              <p className="text-4xl md:text-6xl font-black italic tracking-tighter leading-none">{totalHT.toLocaleString()} € <span className="text-xs not-italic font-bold opacity-30">HT</span></p>
-          </div>
-          <button onClick={handleSave} className="w-full md:w-auto bg-[#002B5C] text-white px-16 py-6 rounded-[2rem] font-black uppercase text-sm tracking-widest hover:bg-blue-600 transition-all shadow-2xl active:scale-95 not-italic">
-            Valider la réservation
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}  plus: { 9: 2650, 12: 3770, 15: 4160, 18: 4780, 21: 5270, 24: 5890, 28: 6440, 32: 7250, 36: 8280, 40: 9410, 46: 9870, 52: 10900, 60: 12200, 70: 13700, 80: 15290, 90: 17010, 100: 18610, 110: 20320, 120: 21810, 144: 30770, 150: 37450 },
-  premium: { 9: 3680, 12: 4710, 15: 5200, 18: 6000 }
-};
-
-export default function BC1Page() {
-  const router = useRouter();
-  const [selection, setSelection] = useState({ pack: 'simple', surface: 9 });
-  const [selectedOptions, setSelectedOptions] = useState<{ [key: string]: number }>({});
-  const [totalHT, setTotalHT] = useState(0);
-  const [loading, setLoading] = useState(true);
-
-  // --- 1. CHARGEMENT INITIAL ---
-  useEffect(() => {
-    const loadSavedData = async () => {
-      const userEmail = localStorage.getItem('userEmail');
-      if (!userEmail) return router.push('/login');
-
-      try {
-        const res = await fetch(`${API_URL}/api/company-details?email=${encodeURIComponent(userEmail)}`);
-        if (res.ok) {
-          const data = await res.json();
-          const company = data.company;
-          if (company) {
-            // Restauration Stand
-            if (company.pack) setSelection({ pack: company.pack.toLowerCase(), surface: company.surface || 9 });
-            // Restauration Options
-            if (company.options) {
-              const restored: { [key: string]: number } = {};
-              Object.entries(company.options).forEach(([label, qty]) => {
-                const opt = OPTIONS_CATALOG.find(o => o.label === label);
-                if (opt) restored[opt.id] = qty as number;
-              });
-              setSelectedOptions(restored);
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Erreur chargement :", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadSavedData();
-  }, [router]);
-
-  // --- 2. CALCUL DU TOTAL ---
-  useEffect(() => {
-    const standPrice = (pricingData[selection.pack] && pricingData[selection.pack][selection.surface]) ? pricingData[selection.pack][selection.surface] : 0;
-    const optionsPrice = OPTIONS_CATALOG.reduce((acc, opt) => acc + (opt.price * (selectedOptions[opt.id] || 0)), 0);
-    setTotalHT(standPrice + optionsPrice);
-  }, [selection, selectedOptions]);
-
-  const updateOptionQty = (id: string, delta: number) => {
-    setSelectedOptions(prev => ({
-      ...prev,
-      [id]: Math.max(0, (prev[id] || 0) + delta)
-    }));
-  };
-
-  // --- 3. SAUVEGARDE ---
-  const handleSave = async () => {
-    const userEmail = localStorage.getItem('userEmail');
-    if (!userEmail) return;
-
-    const optionsToSave: { [key: string]: number } = {};
-    Object.entries(selectedOptions).forEach(([id, qty]) => {
-      if (qty > 0) {
-        const details = OPTIONS_CATALOG.find(o => o.id === id);
-        if (details) optionsToSave[details.label] = qty;
-      }
-    });
-
-    try {
-      const res = await fetch(`${API_URL}/api/save-bc1`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: userEmail,
-          pack: selection.pack,
-          surface: selection.surface,
-          options: optionsToSave,
-          totalHT: totalHT
-        })
-      });
-
-      if (res.ok) {
-        alert("✅ Choix enregistrés !");
-        router.push('/dashboard');
-      } else {
-        alert("Erreur lors de la sauvegarde.");
-      }
-    } catch (e) {
-      alert("Erreur de connexion au serveur.");
-    }
-  };
-
-  if (loading) return <div className="min-h-screen flex items-center justify-center font-black italic text-[#002B5C]">Chargement...</div>;
-
-  return (
-    <div className="min-h-screen bg-gray-50 pb-48 font-sans italic text-[#002B5C]">
-      <div className="max-w-6xl mx-auto pt-10 px-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
-          <Link href="/dashboard" className="font-black uppercase text-[10px] tracking-widest bg-white px-4 py-2 rounded-full shadow-sm hover:bg-[#002B5C] hover:text-white transition-all not-italic">
-            ← Dashboard
-          </Link>
-          <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tighter italic leading-none text-right">Votre Stand 2026</h1>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          {/* CONFIGURATION STAND */}
-          <div className="lg:col-span-4 space-y-6">
-            <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-gray-100">
-              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500 mb-6 block not-italic">01. Configuration</span>
-              <div className="space-y-8 not-italic">
-                <div>
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-3">Type de Pack</label>
-                  <select 
-                    value={selection.pack}
-                    onChange={(e) => setSelection({...selection, pack: e.target.value})}
-                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl p-4 font-bold outline-none focus:border-[#002B5C] transition-all"
-                  >
-                    <option value="simple">Pack Simple</option>
-                    <option value="plus">Pack Plus</option>
-                    <option value="premium">Pack Premium</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-3">Surface</label>
-                  <select 
-                    value={selection.surface}
-                    onChange={(e) => setSelection({...selection, surface: parseInt(e.target.value)})}
-                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl p-4 font-bold outline-none focus:border-[#002B5C] transition-all"
-                  >
-                    {pricingData[selection.pack] && Object.keys(pricingData[selection.pack]).map(size => (
-                      <option key={size} value={size}>{size} m² — {pricingData[selection.pack][size].toLocaleString()} €</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* OPTIONS CATALOGUE */}
-          <div className="lg:col-span-8 bg-white p-8 md:p-12 rounded-[3rem] shadow-2xl border border-gray-100">
-            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500 mb-8 block not-italic">02. Catalogue Communication</span>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {OPTIONS_CATALOG.map((opt) => (
-                <div key={opt.id} className="p-6 bg-gray-50 rounded-3xl border border-transparent hover:border-blue-200 transition-all flex flex-col justify-between min-h-[140px]">
-                  <div>
-                    <p className="text-[11px] font-black uppercase leading-tight mb-2">{opt.label}</p>
-                    <p className="text-blue-500 font-bold not-italic text-[10px]">{opt.price.toLocaleString()} € HT</p>
-                  </div>
-                  <div className="flex items-center justify-between mt-4">
-                    <span className="text-[9px] font-black text-gray-300 uppercase not-italic">Qté</span>
-                    <div className="flex items-center gap-3 bg-white p-1 rounded-xl shadow-sm border border-gray-100">
-                      <button onClick={() => updateOptionQty(opt.id, -1)} className="w-8 h-8 flex items-center justify-center font-bold text-gray-400 hover:text-red-500">-</button>
-                      <span className="font-black not-italic text-sm">{selectedOptions[opt.id] || 0}</span>
-                      <button onClick={() => updateOptionQty(opt.id, 1)} className="w-8 h-8 flex items-center justify-center font-bold text-[#002B5C] hover:text-blue-600">+</button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* BARRE FIXE FINALE */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-100 p-6 z-50">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 not-italic">Récapitulatif HT</p>
-              <p className="text-4xl md:text-6xl font-black italic tracking-tighter leading-none">{totalHT.toLocaleString()} €</p>
-          </div>
-          <button 
-            onClick={handleSave}
-            className="w-full md:w-auto bg-[#002B5C] text-white px-16 py-6 rounded-[2rem] font-black uppercase text-sm tracking-widest hover:bg-blue-600 transition-all shadow-2xl active:scale-95"
-          >
-            Valider mes choix
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}          if (company) {
-            // Restauration du pack et surface
-            if (company.pack) {
-              setSelection({ 
-                pack: company.pack.toLowerCase(), 
-                surface: company.surface || 9 
-              });
-            }
-
-            // Restauration des options (Nom -> ID)
-            if (company.options) {
-              const restoredOptions: { [key: string]: number } = {};
-              Object.entries(company.options).forEach(([label, qty]) => {
-                const optionFound = OPTIONS_CATALOG.find(o => o.label === label);
-                if (optionFound) {
-                  restoredOptions[optionFound.id] = qty as number;
-                }
-              });
-              setSelectedOptions(restoredOptions);
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Erreur de chargement", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadSavedData();
-  }, [router]);
-
-  // --- 2. CALCUL DU TOTAL ---
   useEffect(() => {
     const standPrice = pricingData[selection.pack][selection.surface] || 0;
-    const optionsPrice = OPTIONS_CATALOG.reduce((acc, opt) => {
-      return acc + (opt.price * (selectedOptions[opt.id] || 0));
-    }, 0);
+    const optionsPrice = OPTIONS_CATALOG.reduce((acc, opt) => acc + (opt.price * (selectedOptions[opt.id] || 0)), 0);
     setTotalHT(standPrice + optionsPrice);
   }, [selection, selectedOptions]);
 
-  const updateOptionQty = (id: string, delta: number) => {
-    setSelectedOptions(prev => ({
-      ...prev,
-      [id]: Math.max(0, (prev[id] || 0) + delta)
-    }));
-  };
-
-  // --- 3. SAUVEGARDE ---
   const handleSave = async () => {
-    const userEmail = localStorage.getItem('userEmail');
-    if (!userEmail) return;
-    
-    const optionsToSave: { [key: string]: number } = {};
+    const email = localStorage.getItem('userEmail');
+    const optionsToSave: any = {};
     Object.entries(selectedOptions).forEach(([id, qty]) => {
-      if (qty > 0) {
-        const details = OPTIONS_CATALOG.find(o => o.id === id);
-        if (details) optionsToSave[details.label] = qty;
-      }
+      const opt = OPTIONS_CATALOG.find(o => o.id === id);
+      if (opt && qty > 0) optionsToSave[opt.label] = qty;
     });
 
     try {
-      // CORRECTION : On utilise l'URL de sauvegarde /api/save-bc1
       const res = await fetch(`${API_URL}/api/save-bc1`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: userEmail,
-          pack: selection.pack,
-          surface: selection.surface,
-          options: optionsToSave,
-          totalHT: totalHT
-        })
+        body: JSON.stringify({ email, pack: selection.pack, surface: selection.surface, options: optionsToSave, totalHT })
       });
-
-      if (res.ok) {
-        alert("✅ Choix mémorisés avec succès !");
-        router.push('/dashboard');
-      } else {
-        alert("Erreur lors de la sauvegarde.");
-      }
-    } catch (e) {
-      alert("Erreur de connexion au serveur.");
-    }
+      if (res.ok) { router.push('/dashboard'); }
+    } catch (e) { alert("Erreur de connexion"); }
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center italic font-black text-[#002B5C]">Chargement de vos choix...</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center font-black italic text-[#002B5C]">Chargement...</div>;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-48 font-sans italic text-[#002B5C]">
       <div className="max-w-6xl mx-auto pt-10 px-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
-            <Link href="/dashboard" className="font-black uppercase text-[10px] tracking-[0.2em] bg-white px-4 py-2 rounded-full shadow-sm hover:bg-blue-900 hover:text-white transition-all not-italic">
-                ← Retour au Dashboard
-            </Link>
-            <h1 className="text-3xl md:text-5xl font-black uppercase tracking-tighter italic leading-none">Votre Commande 2026</h1>
-        </div>
-
+        <Link href="/dashboard" className="inline-block bg-white px-4 py-2 rounded-full shadow-sm hover:bg-[#002B5C] hover:text-white transition-all mb-10 text-[10px] font-black uppercase not-italic tracking-widest">← Dashboard</Link>
+        <h1 className="text-4xl font-black uppercase italic mb-10">Votre Stand 2026</h1>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          <div className="lg:col-span-4 space-y-6">
-            <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-gray-100">
-              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500 mb-6 block not-italic">01. Configuration</span>
-              <div className="space-y-8 not-italic">
-                <div>
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-3 ml-2">Type de Pack</label>
-                  <select 
-                    value={selection.pack}
-                    onChange={(e) => setSelection({...selection, pack: e.target.value})}
-                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl p-4 font-bold outline-none focus:border-blue-900 transition-all appearance-none"
-                  >
-                    <option value="simple">Pack Simple</option>
-                    <option value="plus">Pack Plus</option>
-                    <option value="premium">Pack Premium</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-3 ml-2">Surface du stand</label>
-                  <select 
-                    value={selection.surface}
-                    onChange={(e) => setSelection({...selection, surface: parseInt(e.target.value)})}
-                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl p-4 font-bold outline-none focus:border-blue-900 transition-all appearance-none"
-                  >
-                    {pricingData[selection.pack] && Object.keys(pricingData[selection.pack]).map(size => (
-                      <option key={size} value={size}>{size} m² — {pricingData[selection.pack][size].toLocaleString()} €</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
+          <div className="lg:col-span-4 bg-white p-8 rounded-[2rem] shadow-xl h-fit">
+            <label className="text-[10px] font-black uppercase text-gray-400 block mb-2">Type de Pack</label>
+            <select value={selection.pack} onChange={(e) => setSelection({...selection, pack: e.target.value})} className="w-full p-4 bg-gray-50 rounded-xl mb-6 font-bold">
+              <option value="simple">Pack Simple</option>
+              <option value="plus">Pack Plus</option>
+              <option value="premium">Pack Premium</option>
+            </select>
+            <label className="text-[10px] font-black uppercase text-gray-400 block mb-2">Surface (m²)</label>
+            <select value={selection.surface} onChange={(e) => setSelection({...selection, surface: parseInt(e.target.value)})} className="w-full p-4 bg-gray-50 rounded-xl font-bold">
+              {Object.keys(pricingData[selection.pack]).map(s => <option key={s} value={s}>{s} m²</option>)}
+            </select>
           </div>
-
-          <div className="lg:col-span-8 bg-white p-8 md:p-12 rounded-[3rem] shadow-2xl border border-gray-100">
-            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500 mb-8 block not-italic">02. Catalogue de communication</span>
+          <div className="lg:col-span-8 bg-white p-8 rounded-[2rem] shadow-xl">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {OPTIONS_CATALOG.map((opt) => (
-                <div key={opt.id} className="p-6 bg-gray-50 rounded-3xl border border-transparent hover:border-blue-200 hover:bg-white transition-all flex flex-col justify-between min-h-[140px]">
-                  <div className="mb-4">
-                    <p className="text-[11px] font-black uppercase leading-tight tracking-tight mb-2">{opt.label}</p>
-                    <p className="text-blue-500 font-bold not-italic text-[10px] tracking-wider">{opt.price.toLocaleString()} € HT</p>
+              {OPTIONS_CATALOG.map(opt => (
+                <div key={opt.id} className="p-6 bg-gray-50 rounded-2xl flex justify-between items-center">
+                  <div>
+                    <p className="font-black text-[11px] uppercase">{opt.label}</p>
+                    <p className="text-blue-500 font-bold not-italic text-[10px]">{opt.price} € HT</p>
                   </div>
-                  <div className="flex items-center justify-between mt-auto pt-4 border-t border-gray-100/50">
-                    <span className="text-[9px] font-black text-gray-300 uppercase not-italic">Quantité</span>
-                    <div className="flex items-center gap-3 bg-white p-1.5 rounded-xl shadow-sm border border-gray-100">
-                      <button onClick={() => updateOptionQty(opt.id, -1)} className="w-8 h-8 flex items-center justify-center font-bold text-gray-400 hover:text-red-500 transition-colors not-italic">-</button>
-                      <span className="font-black not-italic text-sm w-4 text-center">{selectedOptions[opt.id] || 0}</span>
-                      <button onClick={() => updateOptionQty(opt.id, 1)} className="w-8 h-8 flex items-center justify-center font-bold text-[#002B5C] hover:text-blue-600 transition-colors not-italic">+</button>
-                    </div>
+                  <div className="flex items-center gap-3 bg-white p-2 rounded-lg">
+                    <button onClick={() => setSelectedOptions({...selectedOptions, [opt.id]: Math.max(0, (selectedOptions[opt.id] || 0) - 1)})} className="font-bold">-</button>
+                    <span className="font-black not-italic">{selectedOptions[opt.id] || 0}</span>
+                    <button onClick={() => setSelectedOptions({...selectedOptions, [opt.id]: (selectedOptions[opt.id] || 0) + 1})} className="font-bold">+</button>
                   </div>
                 </div>
               ))}
@@ -521,20 +118,9 @@ export default function BC1Page() {
           </div>
         </div>
       </div>
-
-      <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-100 p-6 z-50">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 leading-none mb-1 not-italic">Total de votre commande</p>
-              <p className="text-4xl md:text-6xl font-black italic tracking-tighter leading-none">{totalHT.toLocaleString()} € <span className="text-xs not-italic font-bold opacity-30">HT</span></p>
-          </div>
-          <button 
-            onClick={handleSave}
-            className="w-full md:w-auto bg-[#002B5C] text-white px-16 py-6 rounded-[2rem] font-black uppercase text-sm tracking-[0.2em] hover:bg-blue-600 transition-all shadow-2xl active:scale-95 not-italic"
-          >
-            Valider la réservation
-          </button>
-        </div>
+      <div className="fixed bottom-0 left-0 right-0 bg-white/90 p-6 border-t flex justify-between items-center max-w-6xl mx-auto rounded-t-3xl shadow-2xl">
+        <p className="text-4xl font-black italic">{totalHT.toLocaleString()} € <span className="text-xs not-italic opacity-30">HT</span></p>
+        <button onClick={handleSave} className="bg-[#002B5C] text-white px-10 py-4 rounded-xl font-black uppercase tracking-widest hover:bg-blue-600 transition-all">Valider</button>
       </div>
     </div>
   );
