@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Company {
+  id             Int      @id @default(autoincrement())
+  name           String
+  siren          String   @unique
+  address        String
+  
+  // Facturation
+  billingName    String?
+  billingAddress String?
+  
+  // --- BON DE COMMANDE 1 (STAND) ---
+  pack           String?  // "simple", "plus", "premium"
+  surface        Int?
+  options        Json?    // Détail des options choisies
+  totalHT        Float?   @default(0)
+  bc1Status      String   @default("PENDING") // PENDING, VALIDATED, SIGNED
+  bc1SignedAt    DateTime? // Date de la signature électronique
+
+  // --- BON DE COMMANDE 2 (LOGISTIQUE) ---
+  logisticsData  Json?    // Stocke le snapshot [{name, qty, priceUnitHT, ...}]
+  bc2TotalHT     Float?   @default(0)
+  bc2Status      String   @default("PENDING") // PENDING, VALIDATED, SIGNED
+  bc2SignedAt    DateTime? // Date de la signature électronique
+
+  users          User[]
+  createdAt      DateTime @default(now())
+}
+
+model User {
+  id         Int      @id @default(autoincrement())
+  email      String   @unique
+  password   String
+  firstName  String
+  lastName   String
+  phone      String?
+  jobTitle   String?
+  companyId  Int
+  company    Company  @relation(fields: [companyId], references: [id])
+  createdAt  DateTime @default(now())
+}

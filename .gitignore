@@ -1,0 +1,11 @@
+# On ignore les dossiers lourds
+node_modules/
+.next/
+dist/
+build/
+
+# On ignore les fichiers secrets (TES MOTS DE PASSE)
+.env
+
+# On ignore les fichiers système inutiles
+.DS_Store
