@@ -7,16 +7,16 @@ import pg from 'pg';
 
 const app = express();
 
-// --- 1. CONFIGURATION PRISMA ---
+// --- 1. CONFIGURATION PRISMA (Postgres via pg-pool) ---
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-// --- 2. CONFIGURATION CORS (LA SOUDURE FINALE) ---
+// --- 2. CONFIGURATION CORS ---
 app.use(cors({
   origin: [
-    "https://forum-estp-2026.vercel.app", // Ton URL exacte est maintenant ici !
-    "http://localhost:3000"
+    "https://forum-estp-2026.vercel.app", // Ton URL Vercel
+    "http://localhost:3000"                // Localhost pour tes tests
   ],
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true
@@ -24,9 +24,9 @@ app.use(cors({
 
 app.use(express.json());
 
-// Petit test de vie pour Render
+// Route de test (Health Check)
 app.get('/', (req, res) => {
-  res.send('🚀 Serveur Forum ESTP 2026 Opérationnel et connecté à Vercel !');
+  res.send('🚀 Serveur Forum ESTP 2026 opérationnel (Admin/Sales/User).');
 });
 
 // --- 3. AUTHENTIFICATION ---
@@ -48,13 +48,15 @@ app.post('/api/register', async (req, res) => {
             email: data.email.toLowerCase(),
             phone: data.userPhone,
             jobTitle: data.jobTitle,
-            password: data.password 
+            password: data.password,
+            role: "USER" // Rôle par défaut à l'inscription
           }
         }
       }
     });
     res.status(201).json(result);
   } catch (error) {
+    console.error("Erreur Inscription:", error);
     res.status(500).json({ error: "Échec de l'inscription" });
   }
 });
@@ -66,14 +68,57 @@ app.post('/api/login', async (req, res) => {
       where: { email: email.toLowerCase() },
       include: { company: true } 
     });
-    if (!user || user.password !== password) return res.status(401).json({ error: "Identifiants incorrects" });
-    res.json({ firstName: user.firstName, companyName: user.company.name, email: user.email });
+
+    if (!user || user.password !== password) {
+      return res.status(401).json({ error: "Identifiants incorrects" });
+    }
+
+    // On renvoie l'ID et le RÔLE pour le Frontend
+    res.json({ 
+      id: user.id,
+      firstName: user.firstName, 
+      companyName: user.company?.name || "Espace Staff", 
+      email: user.email,
+      role: user.role // ADMIN, SALES ou USER
+    });
   } catch (error) {
     res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
-// --- 4. STATUTS & DASHBOARD ---
+// --- 4. ESPACE GESTION (ADMIN & COMMERCIAUX) ---
+
+app.get('/api/admin/companies', async (req, res) => {
+  const { userId, role } = req.query;
+
+  try {
+    let companies;
+
+    if (role === 'ADMIN') {
+      // Le Super Admin voit absolument tout le monde
+      companies = await prisma.company.findMany({
+        include: { users: { select: { firstName: true, email: true } } },
+        orderBy: { name: 'asc' }
+      });
+    } else if (role === 'SALES') {
+      // Le commercial ne voit que les entreprises dont il est le responsable (salesId)
+      companies = await prisma.company.findMany({
+        where: { salesId: parseInt(userId) },
+        include: { users: { select: { firstName: true, email: true } } },
+        orderBy: { name: 'asc' }
+      });
+    } else {
+      return res.status(403).json({ error: "Accès refusé" });
+    }
+
+    res.json(companies);
+  } catch (error) {
+    console.error("Erreur Admin Fetch:", error);
+    res.status(500).json({ error: "Erreur lors de la récupération" });
+  }
+});
+
+// --- 5. ROUTES EXPOSANTS (STATUTS & DÉTAILS) ---
 
 app.get('/api/company-status', async (req, res) => {
   const { email } = req.query;
@@ -82,7 +127,7 @@ app.get('/api/company-status', async (req, res) => {
       where: { email: String(email).toLowerCase() },
       include: { company: true }
     });
-    if (!user) return res.status(404).json({ error: "Non trouvé" });
+    if (!user || !user.company) return res.status(404).json({ error: "Non trouvé" });
 
     res.json({
       companyName: user.company.name,
@@ -102,36 +147,28 @@ app.get('/api/company-details', async (req, res) => {
       where: { email: String(email).toLowerCase() },
       include: { company: true }
     });
-    if (!user) return res.status(404).json({ error: "Utilisateur introuvable" });
-    res.json({ 
-      user: {
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        phone: user.phone,
-        jobTitle: user.jobTitle
-      },
-      company: user.company 
-    });
+    if (!user) return res.status(404).json({ error: "Introuvable" });
+    res.json({ user, company: user.company });
   } catch (error) {
-    res.status(500).json({ error: "Erreur serveur" });
+    res.status(500).json({ error: "Erreur détails" });
   }
 });
 
-// --- 5. SAUVEGARDE DES BONS DE COMMANDE ---
+// --- 6. SAUVEGARDE DES BONS DE COMMANDE ---
 
 app.post('/api/save-bc1', async (req, res) => {
   const { email, pack, surface, totalHT, options } = req.body;
   try {
     const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-    if (!user) return res.status(404).json({ error: "Utilisateur non trouvé" });
+    if (!user) return res.status(404).json({ error: "User non trouvé" });
+
     await prisma.company.update({
       where: { id: user.companyId },
       data: { pack, surface, totalHT, options, bc1Status: "VALIDATED" }
     });
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ error: "Erreur sauvegarde BC1" });
+    res.status(500).json({ error: "Erreur BC1" });
   }
 });
 
@@ -139,14 +176,11 @@ app.post('/api/save-bc2', async (req, res) => {
   const { email, logisticsData, totalHT } = req.body;
   try {
     const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-    if (!user) return res.status(404).json({ error: "Utilisateur non trouvé" });
+    if (!user) return res.status(404).json({ error: "User non trouvé" });
+
     await prisma.company.update({
       where: { id: user.companyId },
-      data: {
-        logisticsData: logisticsData,
-        bc2TotalHT: totalHT,
-        bc2Status: "VALIDATED"
-      }
+      data: { logisticsData, bc2TotalHT: totalHT, bc2Status: "VALIDATED" }
     });
     res.json({ success: true });
   } catch (error) {
@@ -154,8 +188,8 @@ app.post('/api/save-bc2', async (req, res) => {
   }
 });
 
-// --- 6. DÉMARRAGE ---
+// --- 7. DÉMARRAGE ---
 const PORT = process.env.PORT || 3001; 
 app.listen(PORT, () => {
-  console.log(`🚀 SERVEUR ESTP ACTIF SUR LE PORT : ${PORT}`);
+  console.log(`🚀 SERVEUR ESTP PRÊT SUR LE PORT : ${PORT}`);
 });
