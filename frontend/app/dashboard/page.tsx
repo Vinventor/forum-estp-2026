@@ -3,12 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import jsPDF from 'jspdf';
+import jsPDF from 'jspdf'; 
 import autoTable from 'jspdf-autotable';
 
+// Utilisation de l'URL de ton backend Render
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://forum-estp-2026.onrender.com';
 
-// --- CATALOGUES POUR LES PDF ---
 const OPTIONS_CATALOG = [
   { id: '88', label: 'Vidéo de présentation entreprise', price: 375 },
   { id: '89', label: 'Placement du Logo entreprise sur les affiches', price: 700 },
@@ -33,82 +33,85 @@ const pricingData: any = {
 };
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const [role, setRole] = useState<string | null>(null);
   const [userName, setUserName] = useState('');
-  const [companyName, setCompanyName] = useState('');
-  const [loading, setLoading] = useState(true);
-
-  // Data pour la vue Admin/Sales
-  const [companies, setCompanies] = useState([]);
-  
-  // Data pour la vue User
-  const [stats, setStats] = useState({ isBc1Valid: false, isBc2Valid: false });
+  const [companyName, setCompanyName] = useState('Chargement...');
   const [fullData, setFullData] = useState<any>(null);
+  const [status, setStatus] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
-  const formatPrice = (num: number) => Math.round(num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  const formatPrice = (num: number) => Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 
   useEffect(() => {
-    const storedRole = localStorage.getItem('userRole');
-    const storedEmail = localStorage.getItem('userEmail');
-    const storedId = localStorage.getItem('userId');
-    const storedName = localStorage.getItem('user_name');
-    const storedCompany = localStorage.getItem('companyName');
-
-    if (!storedEmail) return router.push('/login');
-
-    setRole(storedRole);
-    setUserName(storedName || 'Collaborateur');
-    setCompanyName(storedCompany || 'Forum ESTP');
-
     const fetchData = async () => {
-      try {
-        if (storedRole === 'ADMIN' || storedRole === 'SALES') {
-          // APPEL API POUR LE STAFF
-          const res = await fetch(`${API_URL}/api/admin/companies?userId=${storedId}&role=${storedRole}`);
-          const data = await res.json();
-          setCompanies(data);
-        } else {
-          // APPEL API POUR L'EXPOSANT
-          const resStatus = await fetch(`${API_URL}/api/company-status?email=${encodeURIComponent(storedEmail)}`);
-          const statusData = await resStatus.json();
-          setStats({ isBc1Valid: statusData.isBc1Valid, isBc2Valid: statusData.isBc2Valid });
+      const userEmail = localStorage.getItem('userEmail');
+      const storedName = localStorage.getItem('user_name');
+      const storedCompany = localStorage.getItem('companyName');
 
-          const resDetails = await fetch(`${API_URL}/api/company-details?email=${encodeURIComponent(storedEmail)}`);
-          const detailsData = await resDetails.json();
-          setFullData(detailsData);
-        }
+      if (!userEmail) return router.push('/login');
+
+      // Affichage immédiat depuis le cache
+      setUserName(storedName || 'Exposant');
+      setCompanyName(storedCompany || 'Votre Entreprise');
+
+      try {
+        const resStatus = await fetch(`${API_URL}/api/company-status?email=${encodeURIComponent(userEmail)}`);
+        const statusData = await resStatus.json();
+        setStatus(statusData);
+        if(statusData.companyName) setCompanyName(statusData.companyName);
+
+        const resDetails = await fetch(`${API_URL}/api/company-details?email=${encodeURIComponent(userEmail)}`);
+        const detailsData = await resDetails.json();
+        setFullData(detailsData);
       } catch (err) {
-        console.error("Erreur de synchronisation :", err);
+        console.error("Erreur synchronisation serveur :", err);
       } finally {
         setLoading(false);
       }
     };
-
     fetchData();
   }, [router]);
 
-  // --- LOGIQUE GÉNÉRATION PDF (Partagée Admin/User) ---
-  const downloadBC1 = (targetCompany: any) => {
-    const doc = new jsPDF();
-    const c = targetCompany.company || targetCompany; // Gère les deux structures de données
-    const name = c.name || companyName;
-
+  // --- HEADER COMMUN AUX PDF ---
+  const applyHeader = (doc: jsPDF, title: string) => {
+    const navy: [number, number, number] = [0, 43, 92];
     doc.setFont("helvetica", "bolditalic");
     doc.setFontSize(22);
-    doc.setTextColor(0, 43, 92);
+    doc.setTextColor(navy[0], navy[1], navy[2]);
     doc.text("FORUM ESTP 2026", 14, 22);
     doc.setFontSize(9);
-    doc.text("BON DE COMMANDE N°1 - STAND & OPTIONS", 14, 30);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(120);
+    doc.text(title, 14, 30);
+    doc.text(`Date : ${new Date().toLocaleDateString('fr-FR')}`, 165, 22);
     doc.line(14, 35, 196, 35);
+    doc.setFontSize(11);
+    doc.setTextColor(0);
+    doc.setFont("helvetica", "bold");
+    doc.text("EXPOSANT :", 14, 48);
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(14);
+    doc.text(companyName.toUpperCase(), 14, 55);
+  };
 
-    const pack = c.pack?.toLowerCase();
-    const surface = c.surface;
+  const generateBC1PDF = () => {
+    if (!fullData || !fullData.company) return;
+    const doc = new jsPDF();
+    applyHeader(doc, "BON DE COMMANDE N°1 - STAND & OPTIONS");
+    
+    const pack = fullData.company.pack?.toLowerCase();
+    const surface = fullData.company.surface;
     const standHT = (pricingData[pack] && pricingData[pack][surface]) ? pricingData[pack][surface] : 0;
     
-    const rows = [[`Pack ${c.pack?.toUpperCase()}`, `${surface} m²`, `${formatPrice(standHT)} €`, `${formatPrice(standHT)} €`]];
-    if (c.options) {
-      Object.entries(c.options).forEach(([label, qty]: [string, any]) => {
+    const rows = [[
+      `Pack ${fullData.company.pack?.toUpperCase()}`, 
+      `${surface} m²`, 
+      `${formatPrice(standHT)} €`, 
+      `${formatPrice(standHT)} €`
+    ]];
+
+    if (fullData.company.options) {
+      Object.entries(fullData.company.options).forEach(([label, qty]: [string, any]) => {
         const item = OPTIONS_CATALOG.find(o => o.label === label);
         const up = item ? item.price : 0;
         rows.push([label, String(qty), `${formatPrice(up)} €`, `${formatPrice(up * qty)} €`]);
@@ -116,169 +119,124 @@ export default function DashboardPage() {
     }
 
     autoTable(doc, {
-      startY: 50,
-      head: [['Désignation', 'Qté', 'Unit. HT', 'Total HT']],
+      startY: 65,
+      head: [['Désignation', 'Qté', 'Unitaire HT', 'Total HT']],
       body: rows,
-      foot: [['', '', 'TOTAL HT', `${formatPrice(c.totalHT || 0)} €`]],
-      headStyles: { fillColor: [0, 43, 92] }
+      headStyles: { fillColor: [0, 43, 92], textColor: [255, 255, 255], fontStyle: 'bold' },
+      foot: [['', '', 'TOTAL HT', `${formatPrice(fullData.company.totalHT || 0)} €`]],
+      footStyles: { fillColor: [240, 240, 240], fontStyle: 'bold' },
     });
 
-    doc.save(`BC1_${name.replace(/\s+/g, '_')}.pdf`);
+    doc.save(`BC1_${companyName.replace(/\s+/g, '_')}.pdf`);
   };
 
-  const handleLogout = () => {
-    localStorage.clear();
-    router.push('/login');
+  const generateBC2PDF = () => {
+    if (!fullData || !fullData.company) return;
+    const doc = new jsPDF();
+    applyHeader(doc, "BON DE COMMANDE N°2 - LOGISTIQUE & MOBILIER");
+    
+    let bc2TotalHT = 0;
+    const rows: any[] = [];
+
+    if (fullData.company.logisticsData && Array.isArray(fullData.company.logisticsData)) {
+      fullData.company.logisticsData.forEach((item: any) => {
+        const itemTotal = (item.qty || 0) * (item.priceUnitHT || 0);
+        bc2TotalHT += itemTotal;
+        rows.push([item.name, String(item.qty), `${formatPrice(item.priceUnitHT)} €`, `${formatPrice(itemTotal)} €`]);
+      });
+    } else {
+      rows.push(['Aucun article sélectionné', '-', '-', '0 €']);
+    }
+
+    autoTable(doc, {
+      startY: 65,
+      head: [['Article', 'Quantité', 'Unitaire HT', 'Total HT']],
+      body: rows,
+      headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255] },
+      foot: [['', '', 'TOTAL HT', `${formatPrice(bc2TotalHT)} €`]],
+      footStyles: { fillColor: [240, 240, 240], fontStyle: 'bold' },
+    });
+
+    doc.save(`BC2_${companyName.replace(/\s+/g, '_')}.pdf`);
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center font-black italic text-[#002B5C] animate-pulse">Synchronisation du portail...</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center font-black italic text-[#002B5C]">Synchronisation...</div>;
 
-  // ==========================================
-  // VUE STAFF (ADMIN & SALES)
-  // ==========================================
-  if (role === 'ADMIN' || role === 'SALES') {
-    const totalHT = companies.reduce((acc, c: any) => acc + (c.totalHT || 0) + (c.bc2TotalHT || 0), 0);
-
-    return (
-      <div className="min-h-screen bg-gray-50 flex font-sans italic text-[#002B5C]">
-        {/* Sidebar Staff */}
-        <aside className="w-72 bg-[#002B5C] text-white p-8 flex flex-col h-screen sticky top-0 shadow-2xl">
-          <div className="mb-12">
-            <h2 className="text-2xl font-black uppercase italic leading-none">Espace<br/>Staff</h2>
-            <p className="text-[10px] font-black uppercase text-blue-400 mt-2 tracking-[0.3em] not-italic">{role}</p>
-          </div>
-          <nav className="flex-1 space-y-2 not-italic">
-            <div className="bg-white/10 p-4 rounded-2xl font-bold border border-white/10 flex items-center gap-3">📊 Inscriptions</div>
-            <div className="p-4 rounded-2xl text-white/50 flex items-center gap-3">👥 Équipe Commerciale</div>
-          </nav>
-          <button onClick={handleLogout} className="text-red-400 font-bold uppercase text-xs text-left">← Déconnexion</button>
-        </aside>
-
-        {/* Main Content Staff */}
-        <main className="flex-1 p-12">
-          <header className="flex justify-between items-end mb-16">
-            <div>
-              <h1 className="text-5xl font-black uppercase tracking-tighter italic leading-none">Vue d'ensemble</h1>
-              <p className="mt-2 text-gray-400 font-bold not-italic">Connecté en tant que {userName}</p>
-            </div>
-            <div className="bg-white p-8 rounded-[2rem] shadow-xl border border-gray-100 text-right">
-                <p className="text-[10px] font-black uppercase text-gray-400 mb-1 tracking-widest">CA Total Confirmé</p>
-                <p className="text-4xl font-black">{totalHT.toLocaleString()} € <span className="text-xs opacity-30">HT</span></p>
-            </div>
-          </header>
-
-          <div className="bg-white rounded-[3rem] shadow-2xl border border-gray-100 overflow-hidden">
-            <table className="w-full text-left">
-              <thead className="bg-[#002B5C] text-white">
-                <tr className="text-[10px] font-black uppercase tracking-widest">
-                  <th className="p-6">Entreprise</th>
-                  <th className="p-6">Contact</th>
-                  <th className="p-6">Stand / Pack</th>
-                  <th className="p-6 text-center">Dossier</th>
-                  <th className="p-6 text-right">Montant</th>
-                </tr>
-              </thead>
-              <tbody className="not-italic">
-                {companies.map((c: any) => (
-                  <tr key={c.id} className="border-b last:border-0 hover:bg-blue-50 transition-all group">
-                    <td className="p-6 font-black uppercase text-sm">{c.name}</td>
-                    <td className="p-6 text-xs font-bold text-gray-500">
-                      {c.users?.[0]?.firstName || '---'} <br/>
-                      <span className="opacity-50 lowercase">{c.users?.[0]?.email || '---'}</span>
-                    </td>
-                    <td className="p-6">
-                      <p className="font-bold text-xs uppercase">{c.pack || 'Non défini'}</p>
-                      <p className="text-[10px] text-gray-400">{c.surface ? `${c.surface} m²` : ''}</p>
-                    </td>
-                    <td className="p-6">
-                      <div className="flex justify-center gap-2">
-                        <span className={`px-3 py-1 rounded-full text-[9px] font-black ${c.bc1Status === 'VALIDATED' ? 'bg-green-100 text-green-600' : 'bg-red-50 text-red-300'}`}>BC1</span>
-                        <span className={`px-3 py-1 rounded-full text-[9px] font-black ${c.bc2Status === 'VALIDATED' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-300'}`}>BC2</span>
-                      </div>
-                    </td>
-                    <td className="p-6 text-right">
-                      <p className="font-black text-sm">{((c.totalHT || 0) + (c.bc2TotalHT || 0)).toLocaleString()} €</p>
-                      {c.bc1Status === 'VALIDATED' && (
-                        <button onClick={() => downloadBC1(c)} className="text-[9px] font-bold text-blue-600 uppercase hover:underline">Télécharger BC1</button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {companies.length === 0 && <p className="p-20 text-center text-gray-400 italic">Aucune entreprise rattachée pour le moment.</p>}
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  // ==========================================
-  // VUE EXPOSANT (USER)
-  // ==========================================
   return (
     <div className="min-h-screen bg-gray-50 flex font-sans italic text-[#002B5C]">
-      {/* Sidebar User */}
-      <aside className="w-72 bg-[#002B5C] text-white p-8 flex flex-col h-screen sticky top-0 shadow-2xl">
-        <div className="mb-12">
-          <h2 className="text-2xl font-black uppercase leading-none">Forum<br/>ESTP</h2>
-          <p className="text-[10px] font-black text-blue-400 mt-2 tracking-[0.3em] not-italic">EXPOSANT 2026</p>
+      {/* SIDEBAR */}
+      <aside className="w-72 bg-[#002B5C] text-white flex flex-col sticky top-0 h-screen shadow-2xl">
+        <div className="p-8 border-b border-white/10">
+          <h2 className="text-2xl font-black uppercase italic leading-none">Forum</h2>
+          <p className="text-xl font-bold text-blue-400 uppercase tracking-widest italic">ESTP</p>
         </div>
-        <nav className="flex-1 space-y-3 not-italic">
-          <Link href="/dashboard" className="bg-white/10 p-4 rounded-2xl font-bold border border-white/10 flex items-center gap-3">📊 Dashboard</Link>
-          <Link href="/dashboard/bc1" className="p-4 rounded-2xl flex items-center gap-3 hover:bg-white/5 transition-all">🎪 Mon Stand (BC1)</Link>
-          <Link href={stats.isBc1Valid ? "/dashboard/bc2" : "#"} className={`p-4 rounded-2xl flex items-center gap-3 transition-all ${stats.isBc1Valid ? 'hover:bg-white/5' : 'opacity-20 cursor-not-allowed'}`}>📦 Logistique (BC2)</Link>
+        <nav className="flex-1 p-6 space-y-3 not-italic">
+          <SidebarLink href="/dashboard" label="Tableau de bord" icon="📊" active />
+          <SidebarLink href="/dashboard/bc1" label="Mon Stand (BC1)" icon="🎪" />
+          <SidebarLink href={status?.isBc1Valid ? "/dashboard/bc2" : "#"} label="Logistique (BC2)" icon="📦" disabled={!status?.isBc1Valid} />
+          <SidebarLink href="/dashboard/documents" label="Documents & Logo" icon="📄" />
         </nav>
-        <button onClick={handleLogout} className="text-red-400 font-bold uppercase text-xs text-left">← Déconnexion</button>
+        <div className="p-6 border-t border-white/10">
+          <button onClick={() => { localStorage.clear(); router.push('/login'); }} className="text-red-400 font-bold uppercase text-xs">← Déconnexion</button>
+        </div>
       </aside>
 
-      <main className="flex-1 p-12">
+      <main className="flex-1 p-12 overflow-y-auto">
         <header className="mb-16">
-          <h1 className="text-5xl font-black uppercase tracking-tighter italic leading-none">Bonjour, <span className="text-blue-600">{userName}</span></h1>
-          <p className="mt-2 text-gray-400 font-bold uppercase text-sm tracking-widest not-italic">{companyName}</p>
+          <h1 className="text-4xl font-black uppercase italic leading-none">
+            Bonjour, <span className="text-blue-600">{userName}</span>
+          </h1>
+          <p className="mt-2 text-gray-500 font-bold uppercase text-xs tracking-widest not-italic">{companyName}</p>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* CARTE BC1 */}
-          <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-gray-100 flex flex-col">
-            <div className="flex justify-between items-start mb-10">
-              <span className="text-6xl font-black opacity-5">01</span>
-              <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase ${stats.isBc1Valid ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
-                {stats.isBc1Valid ? 'Validé' : 'À faire'}
-              </span>
-            </div>
-            <h3 className="text-2xl font-black uppercase mb-8 leading-tight flex-1">Mon Stand &<br/>Options</h3>
-            <div className="space-y-3">
-              <Link href="/dashboard/bc1" className="block w-full bg-[#002B5C] text-white text-center py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-black transition-all">Accéder</Link>
-              {stats.isBc1Valid && (
-                <button onClick={() => downloadBC1(fullData)} className="w-full bg-white text-[#002B5C] border-2 border-[#002B5C] py-4 rounded-2xl font-black uppercase text-xs hover:bg-gray-50 transition-all italic">📥 Télécharger BC1</button>
-              )}
-            </div>
-          </div>
+          <Card title="Mon Stand & Options" step="01" status={status?.isBc1Valid ? 'VALIDÉ' : 'À FAIRE'} color={status?.isBc1Valid ? 'green' : 'orange'}>
+            <Link href="/dashboard/bc1" className="block w-full bg-[#002B5C] text-white py-4 rounded-xl font-black uppercase text-center text-xs tracking-widest hover:bg-black transition-all mb-3">Modifier</Link>
+            {status?.isBc1Valid && (
+              <button onClick={generateBC1PDF} className="w-full bg-white text-[#002B5C] border-2 border-[#002B5C] py-4 rounded-xl font-black uppercase text-xs text-center hover:bg-gray-50 italic">📥 Télécharger le BC1</button>
+            )}
+          </Card>
 
           {/* CARTE BC2 */}
-          <div className={`bg-white p-10 rounded-[3rem] shadow-xl border border-gray-100 flex flex-col ${!stats.isBc1Valid ? 'opacity-40 grayscale' : ''}`}>
-            <div className="flex justify-between items-start mb-10">
-              <span className="text-6xl font-black opacity-5">02</span>
-              <span className="px-4 py-1.5 bg-gray-100 text-gray-400 rounded-full text-[10px] font-black uppercase not-italic">
-                {!stats.isBc1Valid ? 'Bloqué' : (stats.isBc2Valid ? 'Validé' : 'À faire')}
-              </span>
-            </div>
-            <h3 className="text-2xl font-black uppercase mb-8 leading-tight flex-1">Logistique &<br/>Mobilier</h3>
-            <Link href={stats.isBc1Valid ? "/dashboard/bc2" : "#"} className={`block w-full text-center py-4 rounded-2xl font-black uppercase text-xs tracking-widest transition-all ${stats.isBc1Valid ? 'bg-[#002B5C] text-white hover:bg-black' : 'bg-gray-100 text-gray-300 cursor-not-allowed'}`}>Accéder</Link>
-          </div>
+          <Card title="Logistique & Mobilier" step="02" status={status?.isBc2Valid ? 'VALIDÉ' : (status?.isBc1Valid ? 'À FAIRE' : 'BLOQUÉ')} color={status?.isBc2Valid ? 'green' : (status?.isBc1Valid ? 'blue' : 'gray')} disabled={!status?.isBc1Valid}>
+            <Link href={status?.isBc1Valid ? "/dashboard/bc2" : "#"} className={`block w-full py-4 rounded-xl font-black uppercase text-center text-xs tracking-widest transition-all mb-3 ${status?.isBc1Valid ? 'bg-[#002B5C] text-white hover:bg-black' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
+              {status?.isBc2Valid ? 'Modifier' : 'Accéder'}
+            </Link>
+            {status?.isBc2Valid && (
+              <button onClick={generateBC2PDF} className="w-full bg-white text-[#002B5C] border-2 border-[#002B5C] py-4 rounded-xl font-black uppercase text-xs text-center hover:bg-gray-50 italic">📥 Télécharger le BC2</button>
+            )}
+          </Card>
 
           {/* CARTE DOCUMENTS */}
-          <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-gray-100 flex flex-col">
-            <div className="flex justify-between items-start mb-10">
-              <span className="text-6xl font-black opacity-5">03</span>
-              <span className="px-4 py-1.5 bg-red-50 text-red-400 rounded-full text-[10px] font-black uppercase not-italic">À faire</span>
-            </div>
-            <h3 className="text-2xl font-black uppercase mb-8 leading-tight flex-1">Documents &<br/>Logo</h3>
-            <Link href="/dashboard/documents" className="block w-full bg-[#002B5C] text-white text-center py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-black transition-all">Gérer</Link>
-          </div>
+          <Card title="Documents & Logo" step="03" status="À FAIRE" color="red">
+            <Link href="/dashboard/documents" className="w-full block bg-[#002B5C] text-white py-4 rounded-xl font-black uppercase text-center text-xs tracking-widest shadow-lg hover:bg-black transition-all">Gérer</Link>
+          </Card>
         </div>
       </main>
+    </div>
+  );
+}
+
+// SOUS-COMPOSANTS DE STRUCTURE
+function SidebarLink({ href, label, icon, active = false, disabled = false }: any) {
+  return (
+    <Link href={href} className={`flex items-center gap-4 px-6 py-4 rounded-2xl font-bold text-sm transition-all ${disabled ? 'opacity-30 cursor-not-allowed' : (active ? 'bg-white/10 text-white' : 'text-blue-200 hover:bg-white/5')}`}>
+      <span className="text-lg">{icon}</span> {label}
+    </Link>
+  );
+}
+
+function Card({ title, step, status, color, children, disabled = false }: any) {
+  const colorMap: any = { green: 'text-green-500 bg-green-50', orange: 'text-orange-500 bg-orange-50', blue: 'text-blue-500 bg-blue-50', red: 'text-red-500 bg-red-50', gray: 'text-gray-400 bg-gray-100' };
+  return (
+    <div className={`bg-white p-10 rounded-[2.5rem] border border-gray-100 shadow-xl flex flex-col ${disabled ? 'opacity-50 grayscale' : ''}`}>
+      <div className="flex justify-between items-start mb-6">
+        <span className="text-5xl font-black text-gray-50 italic leading-none">{step}</span>
+        <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full ${colorMap[color]}`}>{status}</span>
+      </div>
+      <h3 className="text-2xl font-black uppercase italic mb-8 flex-1 leading-tight">{title}</h3>
+      {children}
     </div>
   );
 }
