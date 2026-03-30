@@ -4,12 +4,20 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 1. Définition des rôles
+enum Role {
+  ADMIN      // Accès total
+  SALES      // Accès uniquement aux entreprises assignées
+  USER       // L'exposant classique (accès uniquement à sa boîte)
 }
 
 model Company {
-  id             Int      @id @default(autoincrement())
+  id             Int       @id @default(autoincrement())
   name           String
-  siren          String   @unique
+  siren          String    @unique
   address        String
   
   // Facturation
@@ -17,21 +25,27 @@ model Company {
   billingAddress String?
   
   // --- BON DE COMMANDE 1 (STAND) ---
-  pack           String?  // "simple", "plus", "premium"
+  pack           String?   
   surface        Int?
-  options        Json?    // Détail des options choisies
-  totalHT        Float?   @default(0)
-  bc1Status      String   @default("PENDING") // PENDING, VALIDATED, SIGNED
-  bc1SignedAt    DateTime? // Date de la signature électronique
+  options        Json?     
+  totalHT        Float?    @default(0)
+  bc1Status      String    @default("PENDING") 
+  bc1SignedAt    DateTime? 
 
   // --- BON DE COMMANDE 2 (LOGISTIQUE) ---
-  logisticsData  Json?    // Stocke le snapshot [{name, qty, priceUnitHT, ...}]
-  bc2TotalHT     Float?   @default(0)
-  bc2Status      String   @default("PENDING") // PENDING, VALIDATED, SIGNED
-  bc2SignedAt    DateTime? // Date de la signature électronique
+  logisticsData  Json?     
+  bc2TotalHT     Float?    @default(0)
+  bc2Status      String    @default("PENDING") 
+  bc2SignedAt    DateTime? 
 
-  users          User[]
-  createdAt      DateTime @default(now())
+  // --- RELATIONS ---
+  users          User[]    @relation("CompanyUsers") // Les employés de l'entreprise
+  
+  // Le commercial responsable (Optionnel)
+  sales          User?     @relation("SalesAssignment", fields: [salesId], references: [id])
+  salesId        Int?
+
+  createdAt      DateTime  @default(now())
 }
 
 model User {
@@ -42,7 +56,16 @@ model User {
   lastName   String
   phone      String?
   jobTitle   String?
-  companyId  Int
-  company    Company  @relation(fields: [companyId], references: [id])
+  
+  // Le rôle définit ce que l'utilisateur peut voir
+  role       Role     @default(USER)
+
+  // Relation pour les exposants (un USER appartient à une Company)
+  companyId  Int?
+  company    Company? @relation("CompanyUsers", fields: [companyId], references: [id])
+
+  // Relation pour les commerciaux (un SALES gère plusieurs Company)
+  assignedCompanies Company[] @relation("SalesAssignment")
+
   createdAt  DateTime @default(now())
 }
